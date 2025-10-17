@@ -28,6 +28,16 @@ float get_filtered_distance() {
   return 0.0; // TODO: impl
 }
 
+// calculates the output frequency based on a given distance
+float calculate_frequency(float dist) {
+  return g_distance_cm; // TODO: impl (mapping of dist->freq)
+}
+
+// adjusts the tone using given values
+void adjust_tone(float freq, float vol) {
+  // TODO: impl
+}
+
 int main() {
   return 0;
 }
