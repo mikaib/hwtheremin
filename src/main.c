@@ -21,6 +21,11 @@ void set_volume(float scalar) {
   g_volume = scalar;
 }
 
+// reads out the pot meter (0.0 - 1.0)
+float read_potentiometer() {
+  return 0.0; // TODO: impl, perhaps GetVolume is reading the potentiometer and SetVolume is for the sound modulation state? Currently this feels like violating DRY principles.
+}
+
 // signal sensor to read the distance
 void read_distance() {
   g_distance_cm = 0.0; // TODO: impl
