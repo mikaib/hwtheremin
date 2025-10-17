@@ -38,6 +38,16 @@ void adjust_tone(float freq, float vol) {
   // TODO: impl
 }
 
+// updates the values of the I2C LCD (note: distance and frequency will be rounded)
+void update_twi_display(float dist, float freq) {
+  // TODO: impl
+}
+
+// updates the value on the filter strength display (0-15) in hexadecimal notation
+void update_segment_display(uint8_t filter) {
+  // TODO: impl
+}
+
 int main() {
   return 0;
 }
