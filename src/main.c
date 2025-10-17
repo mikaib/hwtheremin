@@ -1,5 +1,13 @@
 #include <stdint.h>
 
+// enum to represent the state of the 2 buttons
+typedef enum filter_selector_state {
+  NONE,
+  UP,
+  DOWN
+} filter_selector_state_t;
+
+// global variables
 float g_volume = 0.0;
 float g_distance_cm = 0.0;
 
@@ -45,6 +53,16 @@ void update_twi_display(float dist, float freq) {
 
 // updates the value on the filter strength display (0-15) in hexadecimal notation
 void update_segment_display(uint8_t filter) {
+  // TODO: impl
+}
+
+// reads the buttons for the filter selection
+filter_selector_state_t read_buttons() {
+  return NONE; // TODO: impl
+}
+
+// sets the size of the filter
+void set_filter_size(int size) {
   // TODO: impl
 }
 
