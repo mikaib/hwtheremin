@@ -23,6 +23,11 @@ float get_read_distance() {
   return g_distance_cm;
 }
 
+// get the filtered distance in cm
+float get_filtered_distance() {
+  return 0.0; // TODO: impl
+}
+
 int main() {
   return 0;
 }
