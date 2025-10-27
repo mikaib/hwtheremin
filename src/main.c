@@ -1,6 +1,8 @@
 #include <avr/delay.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <twi.h>
+#include <hd44780pcf8574.h>
 
 // config
 #define SEGMENT_DISPLAY_ADDR 0x21
@@ -60,9 +62,30 @@ void adjust_tone(float freq, float vol) {
   // TODO: impl
 }
 
+// initializes the TWI display
+void init_twi_display() {
+  HD44780_PCF8574_Init(I2C_DISPLAY_ADDR); // already calls TWI_Init();
+  HD44780_PCF8574_DisplayClear(I2C_DISPLAY_ADDR);
+  HD44780_PCF8574_DisplayOn(I2C_DISPLAY_ADDR);
+  HD44780_PCF8574_PositionXY(I2C_DISPLAY_ADDR, 0, 0);
+  HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, "Dist (cm): 0.0");
+  HD44780_PCF8574_PositionXY(I2C_DISPLAY_ADDR, 0, 1);
+  HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, "Freq (hz): 0");
+}
+
 // updates the values of the I2C LCD (note: distance and frequency will be rounded)
 void update_twi_display(float dist, float freq) {
-  // TODO: impl
+  char buf[6]; // room for 5 chars
+
+  // distance
+  HD44780_PCF8574_PositionXY(I2C_DISPLAY_ADDR, 11, 0);
+  dtostrf(dist, 4, 1, buf); // printf doesn't contain support for %f, luckily AVR has "dtostrf" in stdlib.h
+  HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, buf);
+
+  // frequency
+  HD44780_PCF8574_PositionXY(I2C_DISPLAY_ADDR, 11, 1);
+  snprintf(buf, sizeof(buf), "%i", (int)freq);
+  HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, buf);
 }
 
 // updates the value on the filter strength display (0-15) in hexadecimal notation
@@ -85,6 +108,6 @@ void set_filter_size(int size) {
 }
 
 int main() {
-  TWI_Init();
+  init_twi_display(); // NOTE: already calls TWI_Init();
   return 0;
 }
