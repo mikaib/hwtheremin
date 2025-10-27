@@ -14,6 +14,7 @@
 #define I2C_DISPLAY_ADDR     0x27
 #define ECHO_PIN             PB0
 #define TRIGGER_PIN          PB1
+#define BUZZER_PIN           PD3
 #define FREQ_MIN             230.0
 #define FREQ_MAX             1400.0
 #define DIST_MAX             65.0
@@ -38,6 +39,7 @@ typedef enum ping_sensor_state {
 // global variables
 float g_volume = 0.0;
 float g_distance_cm = 0.0;
+bool g_pwm_flag = true;
 bool g_ping_sensor_barrier = false;
 uint16_t g_ping_sensor_start = 0;
 uint16_t g_ping_sensor_pulse = 0;
@@ -108,9 +110,14 @@ float calculate_frequency(float dist) {
   return FREQ_MAX - ((FREQ_MAX - FREQ_MIN) * (dist > DIST_MAX ? DIST_MAX : dist)) / DIST_MAX;
 }
 
-// adjusts the tone using given values
+// adjusts the tone using given values, volume is normalized between 0 and 1
 void adjust_tone(float freq, float vol) {
-  // TODO: impl
+  // frequency
+  uint32_t period = 16000000UL / (256UL * 2UL * freq);
+  OCR0A = period > 255 ? 255 : (uint8_t)period;
+
+  // volume
+  OCR2B = (uint8_t)(vol * 255);
 }
 
 // initializes the TWI display
@@ -168,6 +175,22 @@ void init_distance_sensor() {
   TIMSK1 = (1 << ICIE1); // input capture interrupt (TIMER1_CAPT_vect)
 }
 
+// initialize the buzzer
+void init_buzzer() {
+  // timer2 fast pwm, volume
+  DDRD |= (1 << BUZZER_PIN); // buzzer pin output
+  TCCR2A = (1 << WGM20) | (1 << WGM21) | (1 << COM2B1); // fast pwm mode, non-inverting, ORC2B duty cycle
+  TCCR2B = (1 << CS20); // system clock (no prescaler)
+
+  // timer0 ctc, frequency
+  TCCR0A = (1 << WGM01); // CTC mode
+  TCCR0B = (1 << CS02); // prescaler 256
+  TIMSK0 = (1 << OCIE0A); // Compare Match A interrupt
+
+  // set defaults
+  adjust_tone(FREQ_MIN, 0);
+}
+
 // ISR for timer1 (ultrasonic sensor)
 ISR(TIMER1_CAPT_vect) {
     if (TCCR1B & (1 << ICES1)) {
@@ -180,13 +203,25 @@ ISR(TIMER1_CAPT_vect) {
     }
 }
 
+// ISR for tone modulation
+ISR(TIMER0_COMPA_vect) {
+    if (g_pwm_flag) {
+        TCCR2A |= (1 << COM2B1);
+    } else {
+        TCCR2A &= ~(1 << COM2B1);
+    }
+    g_pwm_flag = !g_pwm_flag;
+}
+
 // main loop
 void loop() {
   bool has_new_measurement = read_distance();
   if (has_new_measurement) {
       float dist = get_read_distance();
       float freq = calculate_frequency(dist);
+      float vol = get_volume();
 
+      adjust_tone(freq, vol);
       update_twi_display(dist, freq);
   }
 }
@@ -195,6 +230,7 @@ void loop() {
 int main() {
   init_twi_display(); // NOTE: already calls TWI_Init();
   init_distance_sensor();
+  init_buzzer();
   sei();
 
   for(;;) {
