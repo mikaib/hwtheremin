@@ -79,7 +79,7 @@ void update_twi_display(float dist, float freq) {
 
   // distance
   HD44780_PCF8574_PositionXY(I2C_DISPLAY_ADDR, 11, 0);
-  dtostrf(dist, 4, 1, buf); // printf doesn't contain support for %f, luckily AVR has "dtostrf" in stdlib.h
+  dtostrf(dist, 3, 1, buf); // printf doesn't contain support for %f, luckily AVR has "dtostrf" in stdlib.h
   HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, buf);
 
   // frequency
