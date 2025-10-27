@@ -18,9 +18,18 @@ typedef enum filter_selector_state {
   DOWN
 } filter_selector_state_t;
 
+// enum to represent the state of the ping sensor
+typedef enum ping_sensor_state {
+  START_PULSE,
+  STOP_PULSE,
+  WAIT
+} ping_sensor_state_t;
+
 // global variables
 float g_volume = 0.0;
 float g_distance_cm = 0.0;
+uint64_t g_ping_start_time = 0.0;
+ping_sensor_state_t g_ping_sensor_state = START_PULSE;
 
 // get the volume as a scalar (0.0 - 1.0)
 float get_volume() {
@@ -109,5 +118,12 @@ void set_filter_size(int size) {
 
 int main() {
   init_twi_display(); // NOTE: already calls TWI_Init();
+
+  // TODO: remove test code
+  for(;;) {
+    read_distance();
+    update_twi_display(g_distance_cm, 0);
+  }
+
   return 0;
 }
