@@ -14,6 +14,9 @@
 #define I2C_DISPLAY_ADDR     0x27
 #define ECHO_PIN             PB0
 #define TRIGGER_PIN          PB1
+#define FREQ_MIN             230.0
+#define FREQ_MAX             1400.0
+#define DIST_MAX             65.0
 
 // charmap (int -> pin states)
 const uint8_t SEGMENT_CHARMAP[16] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x77, 0x7C, 0x39, 0x5E, 0x79, 0x71};
@@ -102,7 +105,7 @@ float get_filtered_distance() {
 
 // calculates the output frequency based on a given distance
 float calculate_frequency(float dist) {
-  return g_distance_cm; // TODO: impl (mapping of dist->freq)
+  return FREQ_MAX - ((FREQ_MAX - FREQ_MIN) * (dist > DIST_MAX ? DIST_MAX : dist)) / DIST_MAX;
 }
 
 // adjusts the tone using given values
