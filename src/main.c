@@ -178,10 +178,26 @@ ISR(TIMER1_CAPT_vect) {
     }
 }
 
+// main loop
+void loop() {
+  bool has_new_measurement = read_distance();
+  if (has_new_measurement) {
+      float dist = get_read_distance();
+      float freq = calculate_frequency(dist);
+
+      update_twi_display(dist, freq);
+  }
+}
+
+// entry point
 int main() {
   init_twi_display(); // NOTE: already calls TWI_Init();
   init_distance_sensor();
   sei();
+
+  for(;;) {
+    loop();
+  }
 
   return 0;
 }
