@@ -1,95 +1,110 @@
 #include <util/delay.h>
+
 #include <avr/interrupt.h>
+
 #include <stdint.h>
+
 #include <stdlib.h>
+
 #include <stdbool.h>
+
 #include <twi.h>
+
 #include <hd44780pcf8574.h>
 
 // constant macros
-#define US_TO_TICKS(us, prescaler) (int)(((us / 1000000.0) * 16000000.0) / prescaler)
+#define US_TO_TICKS(us, prescaler)(int)(((us / 1000000.0) * 16000000.0) / prescaler)
 
 // config
 #define SEGMENT_DISPLAY_ADDR 0x21
-#define I2C_DISPLAY_ADDR     0x27
-#define ECHO_PIN             PB0
-#define TRIGGER_PIN          PB1
-#define BUZZER_PIN           PD3
-#define FREQ_MIN             230.0
-#define FREQ_MAX             1400.0
-#define DIST_MAX             65.0
+#define I2C_DISPLAY_ADDR 0x27
+#define ECHO_PIN PB0
+#define TRIGGER_PIN PB1
+#define BUZZER_PIN PD3
+#define FREQ_MIN 230.0
+#define FREQ_MAX 1400.0
+#define DIST_MAX 65.0
 
 // charmap (int -> pin states)
-const uint8_t SEGMENT_CHARMAP[16] = {0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07, 0x7F, 0x6F, 0x77, 0x7C, 0x39, 0x5E, 0x79, 0x71};
+const uint8_t SEGMENT_CHARMAP[16] = {
+  0x3F,
+  0x06,
+  0x5B,
+  0x4F,
+  0x66,
+  0x6D,
+  0x7D,
+  0x07,
+  0x7F,
+  0x6F,
+  0x77,
+  0x7C,
+  0x39,
+  0x5E,
+  0x79,
+  0x71
+};
 
 // enum to represent the state of the 2 buttons
 typedef enum filter_selector_state {
   NONE,
   UP,
   DOWN
-} filter_selector_state_t;
+}
+filter_selector_state_t;
 
 // enum to represent the state of the ping sensor
 typedef enum ping_sensor_state {
   START_PULSE,
   STOP_PULSE,
   WAIT
-} ping_sensor_state_t;
+}
+ping_sensor_state_t;
 
 // global variables
-float g_volume = 0.0;
 float g_distance_cm = 0.0;
 bool g_pwm_flag = true;
 bool g_ping_sensor_barrier = false;
+uint8_t g_volume = 0;
 uint16_t g_ping_sensor_start = 0;
 uint16_t g_ping_sensor_pulse = 0;
 ping_sensor_state_t g_ping_sensor_state = START_PULSE;
 
 // get the volume as a scalar (0.0 - 1.0)
-float get_volume() {
-  return g_volume; 
-}
-
-// set the volume scalar (0.0 - 1.0)
-void set_volume(float scalar) {
-  g_volume = scalar;
-}
-
-// reads out the pot meter (0.0 - 1.0)s
-float read_potentiometer() {
-  return 0.0; // TODO: impl, perhaps GetVolume is reading the potentiometer and SetVolume is for the sound modulation state? Currently this feels like violating DRY principles.
+uint8_t get_volume() {
+  return g_volume;
 }
 
 // signal sensor to read the distance
 bool read_distance() {
   bool has_new_measurement = false;
-  
+
   switch (g_ping_sensor_state) {
-    case START_PULSE: {
-      PORTB |= (1 << TRIGGER_PIN);
-      g_ping_sensor_start = TCNT1;
-      g_ping_sensor_state = STOP_PULSE;
-      break;
-    }
+  case START_PULSE: {
+    PORTB |= (1 << TRIGGER_PIN);
+    g_ping_sensor_start = TCNT1;
+    g_ping_sensor_state = STOP_PULSE;
+    break;
+  }
 
-    case STOP_PULSE: {
-      uint16_t diff = TCNT1 - g_ping_sensor_start;
-      if (diff >= US_TO_TICKS(10, 8)) {
-          PORTB &= ~(1 << TRIGGER_PIN);
-          g_ping_sensor_state = WAIT;
-      }
-      break;
+  case STOP_PULSE: {
+    uint16_t diff = TCNT1 - g_ping_sensor_start;
+    if (diff >= US_TO_TICKS(10, 8)) {
+      PORTB &= ~(1 << TRIGGER_PIN);
+      g_ping_sensor_state = WAIT;
     }
+    break;
+  }
 
-    case WAIT: {
-      if (g_ping_sensor_barrier) {
-        has_new_measurement = true;
-        g_ping_sensor_barrier = false;
-        g_ping_sensor_state = START_PULSE;
-        g_distance_cm = g_ping_sensor_pulse / 58.0;
-      }
-      break;
+  case WAIT: {
+    if (g_ping_sensor_barrier) {
+      has_new_measurement = true;
+      g_ping_sensor_barrier = false;
+      g_ping_sensor_state = START_PULSE;
+      g_distance_cm = g_ping_sensor_pulse / 58.0;
     }
+    break;
+  }
   }
 
   return has_new_measurement;
@@ -111,24 +126,13 @@ float calculate_frequency(float dist) {
 }
 
 // adjusts the tone using given values, volume is normalized between 0 and 1
-void adjust_tone(float freq, float vol) {
+void adjust_tone(float freq, uint8_t vol) {
   // frequency
   uint32_t period = 16000000UL / (256UL * 2UL * freq);
-  OCR0A = period > 255 ? 255 : (uint8_t)period;
+  OCR0A = period > 255 ? 255 : (uint8_t) period;
 
   // volume
-  OCR2B = (uint8_t)(vol * 255);
-}
-
-// initializes the TWI display
-void init_twi_display() {
-  HD44780_PCF8574_Init(I2C_DISPLAY_ADDR); // already calls TWI_Init();
-  HD44780_PCF8574_DisplayClear(I2C_DISPLAY_ADDR);
-  HD44780_PCF8574_DisplayOn(I2C_DISPLAY_ADDR);
-  HD44780_PCF8574_PositionXY(I2C_DISPLAY_ADDR, 0, 0);
-  HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, "Dist (cm): 0.0");
-  HD44780_PCF8574_PositionXY(I2C_DISPLAY_ADDR, 0, 1);
-  HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, "Freq (hz): 0");
+  OCR2B = vol;
 }
 
 // updates the values of the I2C LCD (note: distance and frequency will be rounded)
@@ -143,7 +147,7 @@ void update_twi_display(float dist, float freq) {
 
   // frequency
   HD44780_PCF8574_PositionXY(I2C_DISPLAY_ADDR, 11, 1);
-  snprintf(buf, sizeof(buf), "%i", (int)freq);
+  snprintf(buf, sizeof(buf), "%i", (int) freq);
   HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, buf);
   HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, "  "); // 0.0 is min, so 2 chars needed
 }
@@ -167,11 +171,22 @@ void set_filter_size(int size) {
   // TODO: impl
 }
 
+// initializes the TWI display
+void init_twi_display() {
+  HD44780_PCF8574_Init(I2C_DISPLAY_ADDR); // already calls TWI_Init();
+  HD44780_PCF8574_DisplayClear(I2C_DISPLAY_ADDR);
+  HD44780_PCF8574_DisplayOn(I2C_DISPLAY_ADDR);
+  HD44780_PCF8574_PositionXY(I2C_DISPLAY_ADDR, 0, 0);
+  HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, "Dist (cm): 0.0");
+  HD44780_PCF8574_PositionXY(I2C_DISPLAY_ADDR, 0, 1);
+  HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, "Freq (hz): 0");
+}
+
 // initializes the distance sensor
 void init_distance_sensor() {
   DDRB |= (1 << TRIGGER_PIN);
   TCCR1A = 0x00; // normal mode
-  TCCR1B = (1 << ICES1) | (1 << CS11); // rising edge, prescaler 8 
+  TCCR1B = (1 << ICES1) | (1 << CS11); // rising edge, prescaler 8
   TIMSK1 = (1 << ICIE1); // input capture interrupt (TIMER1_CAPT_vect)
 }
 
@@ -191,38 +206,50 @@ void init_buzzer() {
   adjust_tone(FREQ_MIN, 0);
 }
 
+// initializes the pot meter
+void init_potentiometer() {
+  ADMUX = (1 << REFS0) | (1 << ADLAR); // 8bit, AVcc ref
+  ADCSRA = (1 << ADEN) | (1 << ADSC) | (1 << ADATE) | (1 << ADIE) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // active, auto trigger enable bit, freerunning, enable interrupt, prescaler 128
+  ADCSRB = 0x00; // freerunning
+}
+
 // ISR for timer1 (ultrasonic sensor)
 ISR(TIMER1_CAPT_vect) {
-    if (TCCR1B & (1 << ICES1)) {
-        TCCR1B &= ~(1 << ICES1);
-        TCNT1 = 0;
-    } else {
-        g_ping_sensor_pulse = TCNT1;
-        g_ping_sensor_barrier = true;
-        TCCR1B |= (1 << ICES1);
-    }
+  if (TCCR1B & (1 << ICES1)) {
+    TCCR1B &= ~(1 << ICES1);
+    TCNT1 = 0;
+  } else {
+    g_ping_sensor_pulse = TCNT1;
+    g_ping_sensor_barrier = true;
+    TCCR1B |= (1 << ICES1);
+  }
 }
 
 // ISR for tone modulation
 ISR(TIMER0_COMPA_vect) {
-    if (g_pwm_flag) {
-        TCCR2A |= (1 << COM2B1);
-    } else {
-        TCCR2A &= ~(1 << COM2B1);
-    }
-    g_pwm_flag = !g_pwm_flag;
+  if (g_pwm_flag) {
+    TCCR2A |= (1 << COM2B1);
+  } else {
+    TCCR2A &= ~(1 << COM2B1);
+  }
+  g_pwm_flag = !g_pwm_flag;
+}
+
+// ISR for the potentiometer
+ISR(ADC_vect) {
+  g_volume = ADCH;
 }
 
 // main loop
 void loop() {
   bool has_new_measurement = read_distance();
   if (has_new_measurement) {
-      float dist = get_read_distance();
-      float freq = calculate_frequency(dist);
-      float vol = get_volume();
+    float dist = get_read_distance();
+    float freq = calculate_frequency(dist);
+    float vol = get_volume();
 
-      adjust_tone(freq, vol);
-      update_twi_display(dist, freq);
+    adjust_tone(freq, vol);
+    update_twi_display(dist, freq);
   }
 }
 
@@ -231,9 +258,10 @@ int main() {
   init_twi_display(); // NOTE: already calls TWI_Init();
   init_distance_sensor();
   init_buzzer();
+  init_potentiometer();
   sei();
 
-  for(;;) {
+  for (;;) {
     loop();
   }
 
