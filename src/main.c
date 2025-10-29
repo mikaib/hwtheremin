@@ -1,19 +1,16 @@
 #include <util/delay.h>
-
 #include <avr/interrupt.h>
-
 #include <stdint.h>
-
 #include <stdlib.h>
-
 #include <stdbool.h>
-
+#include <stdlib.h>
+#include <string.h>
 #include <twi.h>
-
 #include <hd44780pcf8574.h>
 
 // constant macros
 #define US_TO_TICKS(us, prescaler)(int)(((us / 1000000.0) * 16000000.0) / prescaler)
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 
 // config
 #define SEGMENT_DISPLAY_ADDR 0x21
@@ -61,11 +58,20 @@ typedef enum ping_sensor_state {
 }
 ping_sensor_state_t;
 
+// struct for the ds
+typedef struct filter_entry {
+  uint8_t age;
+  float value;
+} filter_entry_t;
+
 // global variables
 float g_distance_cm = 0.0;
 bool g_pwm_flag = true;
 bool g_ping_sensor_barrier = false;
 uint8_t g_volume = 0;
+uint8_t g_filter_size = 0;
+uint8_t g_filter_capacity = 0;
+filter_entry_t* g_filter_arr = NULL;
 uint16_t g_ping_sensor_start = 0;
 uint16_t g_ping_sensor_pulse = 0;
 ping_sensor_state_t g_ping_sensor_state = START_PULSE;
@@ -115,9 +121,97 @@ float get_read_distance() {
   return g_distance_cm;
 }
 
+// compare function for qsort
+int filter_compare(const void* a, const void* b) {
+  float a_val = ((filter_entry_t*)a)->value;
+  float b_val = ((filter_entry_t*)b)->value;
+
+  if (a_val < b_val) return -1;
+  if (a_val > b_val) return 1;
+
+  return 0;
+}
+
 // get the filtered distance in cm
 float get_filtered_distance() {
-  return 0.0; // TODO: impl
+  if (g_filter_arr == NULL) {
+    return 0.0;
+  }
+
+  filter_entry_t sorted[g_filter_size];
+  int center = MIN((g_filter_size / 2) + 1, g_filter_size - 1);
+
+  memcpy(sorted, g_filter_arr, sizeof(filter_entry_t) * g_filter_size);
+  qsort(sorted, g_filter_size, sizeof(filter_entry_t), filter_compare);
+
+  return g_filter_arr[center].value;
+}
+
+// sets the size of the filter
+bool set_filter_size(int size) {
+  if (g_filter_arr != NULL) {
+    filter_entry_t* resized = realloc(g_filter_arr, sizeof(filter_entry_t) * size);
+    if (resized == NULL) {
+      return false;
+    }
+
+    g_filter_arr = resized;
+    g_filter_capacity = size;
+    g_filter_size = MIN(g_filter_size, size);
+    return true;
+  }
+
+  g_filter_arr = malloc(sizeof(filter_entry_t) * size);
+  if (g_filter_arr == NULL) {
+    return false;
+  }
+
+  g_filter_capacity = size;
+  g_filter_size = 0;
+  return true;
+}
+
+// clear the filter
+void clear_filter() {
+  if (g_filter_arr == NULL) {
+    return;
+  }
+
+  memset(g_filter_arr, 0, sizeof(filter_entry_t) * g_filter_capacity); // NOTE: 0 for both float and uint8_t is valid
+  g_filter_size = 0;
+}
+
+// push a value to the filter, shifts to the left if full
+void push_filter_value(float dist_sample) {
+  // ensure arr is valid
+  if (g_filter_arr == NULL) {
+    return;
+  }
+
+  // push to end
+  if (g_filter_size < g_filter_capacity) {
+    g_filter_arr[g_filter_size++] = (filter_entry_t){ 0, dist_sample };
+    return;
+  }
+
+  // increment ages
+  for (int idx = 0; idx < g_filter_size; idx++) {
+    g_filter_arr[idx].age++;
+  }
+
+  // find olders
+  int oldest_age = 0;
+  int oldest_idx = -1;
+  for (int idx = 0; idx < g_filter_size; idx++) {
+    if (g_filter_arr[idx].age > oldest_age) {
+      oldest_age = g_filter_arr[idx].age;
+      oldest_idx = idx;
+    }
+  }
+
+  // set new value
+  g_filter_arr[oldest_idx].age = 0;
+  g_filter_arr[oldest_idx].value = dist_sample;
 }
 
 // calculates the output frequency based on a given distance
@@ -164,11 +258,6 @@ void update_segment_display(uint8_t filter) {
 // reads the buttons for the filter selection
 filter_selector_state_t read_buttons() {
   return NONE; // TODO: impl
-}
-
-// sets the size of the filter
-void set_filter_size(int size) {
-  // TODO: impl
 }
 
 // initializes the TWI display
@@ -245,11 +334,14 @@ void loop() {
   bool has_new_measurement = read_distance();
   if (has_new_measurement) {
     float dist = get_read_distance();
-    float freq = calculate_frequency(dist);
+    push_filter_value(dist);
+
+    float dist_filtered = get_filtered_distance();
+    float freq = calculate_frequency(dist_filtered);
     float vol = get_volume();
 
     adjust_tone(freq, vol);
-    update_twi_display(dist, freq);
+    update_twi_display(dist_filtered, freq);
   }
 }
 
@@ -260,6 +352,10 @@ int main() {
   init_buzzer();
   init_potentiometer();
   sei();
+
+  update_segment_display(1);
+  set_filter_size(1);
+  clear_filter();
 
   for (;;) {
     loop();
