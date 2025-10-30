@@ -11,6 +11,8 @@
 // constant macros
 #define US_TO_TICKS(us, prescaler)(int)(((us / 1000000.0) * 16000000.0) / prescaler)
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
+#define MAX(a, b) ((a) > (b) ? (a) : (b))
+#define LIMIT(x, min, max) (MIN(MAX((x), (min)), (max)))
 
 // config
 #define SEGMENT_DISPLAY_ADDR 0x21
@@ -75,6 +77,8 @@ filter_entry_t* g_filter_arr = NULL;
 uint16_t g_ping_sensor_start = 0;
 uint16_t g_ping_sensor_pulse = 0;
 ping_sensor_state_t g_ping_sensor_state = START_PULSE;
+filter_selector_state_t g_button_state = NONE;
+filter_selector_state_t g_last_button_state = NONE;
 
 // get the volume as a scalar (0.0 - 1.0)
 uint8_t get_volume() {
@@ -302,6 +306,14 @@ void init_potentiometer() {
   ADCSRB = 0x00; // freerunning
 }
 
+// initializes the buttons for the filter config
+void init_buttons() {
+  DDRD &= ~((1 << PD4) | (1 << PD5)); // PD4, PD5 input
+  PORTD |= (1 << PD4) | (1 << PD5); // enable pull-up
+  PCICR |= (1 << PCIE2); // pin change interrupt 2 enable
+  PCMSK2 |= (1 << PCINT20) | (1 << PCINT21); // enable PCINT20 and PCINT21
+}
+
 // ISR for timer1 (ultrasonic sensor)
 ISR(TIMER1_CAPT_vect) {
   if (TCCR1B & (1 << ICES1)) {
@@ -322,6 +334,33 @@ ISR(TIMER0_COMPA_vect) {
     TCCR2A &= ~(1 << COM2B1);
   }
   g_pwm_flag = !g_pwm_flag;
+}
+
+// ISR for the buttons
+ISR(PCINT2_vect) {
+  if (!(PIND & (1 << PD4))) {
+    if (g_button_state != DOWN) {
+      set_filter_size(LIMIT(g_filter_capacity - 2, 1, 15));
+      update_segment_display(g_filter_capacity);
+    }
+    
+    g_button_state = DOWN;
+    _delay_ms(50);
+    return;
+  }
+  
+  if (!(PIND & (1 << PD5))) {
+    if (g_button_state != UP) {
+      set_filter_size(LIMIT(g_filter_capacity + 2, 1, 15));
+      update_segment_display(g_filter_capacity);
+    }
+
+    g_button_state = UP;
+    _delay_ms(50);
+    return;
+  }
+  
+  g_button_state = NONE;
 }
 
 // ISR for the potentiometer
@@ -351,6 +390,7 @@ int main() {
   init_distance_sensor();
   init_buzzer();
   init_potentiometer();
+  init_buttons();
   sei();
 
   update_segment_display(1);
