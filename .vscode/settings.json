@@ -1,5 +1,7 @@
 {
     "files.associations": {
-        "stdlib.h": "c"
+        "stdlib.h": "c",
+        "ping.h": "c",
+        "volume.h": "c"
     }
 }
