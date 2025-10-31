@@ -32,12 +32,12 @@ float get_filtered_distance() {
   }
 
   filter_entry_t sorted[g_filter_size];
-  int center = MIN((g_filter_size / 2) + 1, g_filter_size - 1);
+  int center = MIN(g_filter_size / 2, g_filter_size - 1); // center would be: [0, X], [0, X, 0], [0, X, 0, 0], [0, 0, X, 0, 0]
 
   memcpy(sorted, g_filter_arr, sizeof(filter_entry_t) * g_filter_size);
   qsort(sorted, g_filter_size, sizeof(filter_entry_t), filter_compare);
 
-  return g_filter_arr[center].value;
+  return sorted[center].value;
 }
 
 // sets the size of the filter
@@ -76,35 +76,35 @@ void clear_filter() {
 
 // push a value to the filter, shifts to the left if full
 void push_filter_value(float dist_sample) {
-  // ensure arr is valid
-  if (g_filter_arr == NULL) {
-    return;
-  }
-
-  // push to end
-  if (g_filter_size < g_filter_capacity) {
-    g_filter_arr[g_filter_size++] = (filter_entry_t){ 0, dist_sample };
-    return;
-  }
-
-  // increment ages
-  for (int idx = 0; idx < g_filter_size; idx++) {
-    g_filter_arr[idx].age++;
-  }
-
-  // find olders
-  int oldest_age = 0;
-  int oldest_idx = -1;
-  for (int idx = 0; idx < g_filter_size; idx++) {
-    if (g_filter_arr[idx].age > oldest_age) {
-      oldest_age = g_filter_arr[idx].age;
-      oldest_idx = idx;
+    // ensure arr is valid
+    if (g_filter_arr == NULL) {
+        return;
     }
-  }
 
-  // set new value
-  g_filter_arr[oldest_idx].age = 0;
-  g_filter_arr[oldest_idx].value = dist_sample;
+    // increment ages
+    for (int idx = 0; idx < g_filter_size; idx++) {
+        g_filter_arr[idx].age++;
+    }
+
+    // push to end until full
+    if (g_filter_size < g_filter_capacity) {
+        g_filter_arr[g_filter_size++] = (filter_entry_t){ 0, dist_sample };
+        return;
+    }
+
+    // find oldest
+    int oldest_idx = 0;
+    int oldest_age = g_filter_arr[0].age;
+    for (int idx = 1; idx < g_filter_size; idx++) {
+        if (g_filter_arr[idx].age > oldest_age) {
+            oldest_age = g_filter_arr[idx].age;
+            oldest_idx = idx;
+        }
+    }
+
+    // overwrite oldest
+    g_filter_arr[oldest_idx].age = 0;
+    g_filter_arr[oldest_idx].value = dist_sample;
 }
 
 // initializes the buttons for the filter config
