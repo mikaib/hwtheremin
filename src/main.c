@@ -7,6 +7,7 @@
 #include <ping.h>
 #include <filter.h>
 #include <tone.h>
+#include <volume.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -15,29 +16,9 @@
 #include <twi.h>
 #include <hd44780pcf8574.h>
 
-// global variables
-uint8_t g_volume = 0;
-
-// get the volume as a scalar (0.0 - 1.0)
-uint8_t get_volume() {
-  return g_volume;
-}
-
 // calculates the output frequency based on a given distance
 float calculate_frequency(float dist) {
   return FREQ_MAX - ((FREQ_MAX - FREQ_MIN) * (dist > DIST_MAX ? DIST_MAX : dist)) / DIST_MAX;
-}
-
-// initializes the pot meter
-void init_potentiometer() {
-  ADMUX = (1 << REFS0) | (1 << ADLAR); // 8bit, AVcc ref
-  ADCSRA = (1 << ADEN) | (1 << ADSC) | (1 << ADATE) | (1 << ADIE) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADPS0); // active, auto trigger enable bit, freerunning, enable interrupt, prescaler 128
-  ADCSRB = 0x00; // freerunning
-}
-
-// ISR for the potentiometer
-ISR(ADC_vect) {
-  g_volume = ADCH;
 }
 
 // main loop
