@@ -23,5 +23,6 @@ float get_filtered_distance();
 bool set_filter_size(int size);
 void clear_filter();
 void push_filter_value(float dist_sample);
+void init_buttons();
 
 #endif // FILTER_H
