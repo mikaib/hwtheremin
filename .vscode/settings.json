@@ -1,0 +1,7 @@
+{
+    "files.associations": {
+        "stdlib.h": "c",
+        "ping.h": "c",
+        "volume.h": "c"
+    }
+}
