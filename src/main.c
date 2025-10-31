@@ -31,6 +31,7 @@ void loop() {
 }
 
 // entry point
+#ifndef UNIT_TEST // disable main() when testing is enabled
 int main() {
   init_twi_display(); // NOTE: already calls TWI_Init();
   init_distance_sensor();
@@ -49,3 +50,4 @@ int main() {
 
   return 0;
 }
+#endif
