@@ -4,6 +4,7 @@
 #include <util.h>
 #include <segment.h>
 #include <lcd.h>
+#include <ping.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -20,14 +21,6 @@ typedef enum filter_selector_state {
 }
 filter_selector_state_t;
 
-// enum to represent the state of the ping sensor
-typedef enum ping_sensor_state {
-  START_PULSE,
-  STOP_PULSE,
-  WAIT
-}
-ping_sensor_state_t;
-
 // struct for the ds
 typedef struct filter_entry {
   uint8_t age;
@@ -35,62 +28,17 @@ typedef struct filter_entry {
 } filter_entry_t;
 
 // global variables
-float g_distance_cm = 0.0;
 bool g_pwm_flag = true;
-bool g_ping_sensor_barrier = false;
 uint8_t g_volume = 0;
 uint8_t g_filter_size = 0;
 uint8_t g_filter_capacity = 0;
 filter_entry_t* g_filter_arr = NULL;
-uint16_t g_ping_sensor_start = 0;
-uint16_t g_ping_sensor_pulse = 0;
-ping_sensor_state_t g_ping_sensor_state = START_PULSE;
 filter_selector_state_t g_button_state = NONE;
 filter_selector_state_t g_last_button_state = NONE;
 
 // get the volume as a scalar (0.0 - 1.0)
 uint8_t get_volume() {
   return g_volume;
-}
-
-// signal sensor to read the distance
-bool read_distance() {
-  bool has_new_measurement = false;
-
-  switch (g_ping_sensor_state) {
-  case START_PULSE: {
-    PORTB |= (1 << TRIGGER_PIN);
-    g_ping_sensor_start = TCNT1;
-    g_ping_sensor_state = STOP_PULSE;
-    break;
-  }
-
-  case STOP_PULSE: {
-    uint16_t diff = TCNT1 - g_ping_sensor_start;
-    if (diff >= US_TO_TICKS(10, 8)) {
-      PORTB &= ~(1 << TRIGGER_PIN);
-      g_ping_sensor_state = WAIT;
-    }
-    break;
-  }
-
-  case WAIT: {
-    if (g_ping_sensor_barrier) {
-      has_new_measurement = true;
-      g_ping_sensor_barrier = false;
-      g_ping_sensor_state = START_PULSE;
-      g_distance_cm = g_ping_sensor_pulse / 58.0;
-    }
-    break;
-  }
-  }
-
-  return has_new_measurement;
-}
-
-// read the value of the distance sensor in cm
-float get_read_distance() {
-  return g_distance_cm;
 }
 
 // compare function for qsort
@@ -206,14 +154,6 @@ filter_selector_state_t read_buttons() {
   return NONE; // TODO: impl
 }
 
-// initializes the distance sensor
-void init_distance_sensor() {
-  DDRB |= (1 << TRIGGER_PIN);
-  TCCR1A = 0x00; // normal mode
-  TCCR1B = (1 << ICES1) | (1 << CS11); // rising edge, prescaler 8
-  TIMSK1 = (1 << ICIE1); // input capture interrupt (TIMER1_CAPT_vect)
-}
-
 // initialize the buzzer
 void init_buzzer() {
   // timer2 fast pwm, volume
@@ -243,18 +183,6 @@ void init_buttons() {
   PORTD |= (1 << PD4) | (1 << PD5); // enable pull-up
   PCICR |= (1 << PCIE2); // pin change interrupt 2 enable
   PCMSK2 |= (1 << PCINT20) | (1 << PCINT21); // enable PCINT20 and PCINT21
-}
-
-// ISR for timer1 (ultrasonic sensor)
-ISR(TIMER1_CAPT_vect) {
-  if (TCCR1B & (1 << ICES1)) {
-    TCCR1B &= ~(1 << ICES1);
-    TCNT1 = 0;
-  } else {
-    g_ping_sensor_pulse = TCNT1;
-    g_ping_sensor_barrier = true;
-    TCCR1B |= (1 << ICES1);
-  }
 }
 
 // ISR for tone modulation
