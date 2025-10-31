@@ -1,5 +1,8 @@
 #include <util/delay.h>
 #include <avr/interrupt.h>
+#include <config.h>
+#include <util.h>
+#include <segment.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -7,42 +10,6 @@
 #include <string.h>
 #include <twi.h>
 #include <hd44780pcf8574.h>
-
-// constant macros
-#define US_TO_TICKS(us, prescaler)(int)(((us / 1000000.0) * 16000000.0) / prescaler)
-#define MIN(a, b) ((a) < (b) ? (a) : (b))
-#define MAX(a, b) ((a) > (b) ? (a) : (b))
-#define LIMIT(x, min, max) (MIN(MAX((x), (min)), (max)))
-
-// config
-#define SEGMENT_DISPLAY_ADDR 0x21
-#define I2C_DISPLAY_ADDR 0x27
-#define ECHO_PIN PB0
-#define TRIGGER_PIN PB1
-#define BUZZER_PIN PD3
-#define FREQ_MIN 230.0
-#define FREQ_MAX 1400.0
-#define DIST_MAX 65.0
-
-// charmap (int -> pin states)
-const uint8_t SEGMENT_CHARMAP[16] = {
-  0x3F,
-  0x06,
-  0x5B,
-  0x4F,
-  0x66,
-  0x6D,
-  0x7D,
-  0x07,
-  0x7F,
-  0x6F,
-  0x77,
-  0x7C,
-  0x39,
-  0x5E,
-  0x79,
-  0x71
-};
 
 // enum to represent the state of the 2 buttons
 typedef enum filter_selector_state {
@@ -248,15 +215,6 @@ void update_twi_display(float dist, float freq) {
   snprintf(buf, sizeof(buf), "%i", (int) freq);
   HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, buf);
   HD44780_PCF8574_DrawString(I2C_DISPLAY_ADDR, "  "); // 0.0 is min, so 2 chars needed
-}
-
-// updates the value on the filter strength display (0-15) in hexadecimal notation
-// references used: https://github.com/Matiasus/HD44780_PCF8574/blob/master/lib/hd44780pcf8574.c
-void update_segment_display(uint8_t filter) {
-  TWI_MT_Start();
-  TWI_Transmit_SLAW(SEGMENT_DISPLAY_ADDR);
-  TWI_Transmit_Byte(~SEGMENT_CHARMAP[filter % 16]); // inverted (CA vs CC display)
-  TWI_Stop();
 }
 
 // reads the buttons for the filter selection
